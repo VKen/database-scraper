@@ -245,12 +245,14 @@ def credsubcheck(list):
     global subweird
     global subcredinplace
     global subcredplatform
+    global subcredredirect
 
     suberr = []
     suberr2 = []
     subweird = []
     subcredinplace = []
     subcredplatform = []
+    subcredredirect = []
     total = len(list)
     print ("total: " + str(total))
     creditcount = 0
@@ -272,6 +274,7 @@ def credsubcheck(list):
                     cred = each.attrib["href"]
                     subcredplatform.append(cred)
                     creditplatformcount += 1
+                subcredredirect.append(url)
                 creditcount += 1
             elif "There are no credits" in z:   # Check for no-credits
                 nocreditcount += 1
@@ -526,6 +529,8 @@ def scrapepage6():
 
 def scrapepage7():
     """scrape moby tech info page"""
+    writelog("starting moby tech info page scrape")
+    start = time()
     for x in scrap:
         url = "http://www.mobygames.com"+str(x)+"/techinfo"
         url_hash = hashlib.sha1(url).hexdigest()
@@ -534,12 +539,31 @@ def scrapepage7():
             #x=f.read()
             #y = pq(x)
         except IOError:
-            print ("scraping new html of "+str(x))
-            resp = urllib2.urlopen(url).read()
-            f = open("cache/%s.txt" % url_hash, 'w')
-            f.write(resp)
-            print ("done "+str(x)+" techinfo")
-
+            print ("scraping new html of "+url)
+            while True:  # Unlimited tries to pull data
+                try:
+                    resp = urllib2.urlopen(url).read()
+                    f = open("cache/%s.txt" % url_hash, 'w')
+                    f.write(resp)
+                    break
+                except urllib2.URLError, (err):
+                    print ("URL error(%s)" % (err))
+                    writelog(str(err) + "| Error, retrying...")
+                    print ("Retrying...")
+                    pass
+                except:
+                    pass
+            print ("done "+url)
+        except:
+            end = time()
+            elapse = str(td(seconds = end - start))
+            writelog("Error, process stopped after: "+ elapse)
+            print "Error Time elapsed: " + elapse
+            raise
+    end = time()
+    elapse = str(td(seconds = end - start))
+    writelog("Completed tech info page scrape in " + elapse)
+    print "Time elapsed " + elapse
 
 ########
 # Grab parts of the moby list
@@ -604,6 +628,98 @@ def grabtype():
         elif int(objcnt)%5 == 4: # gameplatform
             gameplatform.append(stuff)
         objcnt += 1
+
+
+###########
+# grab individual game details: Publisher, Developer, Release Date, Platform
+###########
+
+def gamedetgrab(list=scrap):
+    """grab individual game details: Publisher, Developer, Release Date, Platform"""
+    global deterr
+    global det8
+    global det6
+    global det6nopub
+    global det6nodev
+    global det6norel
+    global det6noplat
+    global det4
+
+    deterr = []
+    det8 = []
+    det6 =[]
+    det6nopub = []
+    det6nodev = []
+    det6norel = []
+    det6noplat = []
+    det4 = []
+    det4nopub = []
+    det4nodev = []
+    det4norel = []
+    det4noplat = []
+    
+
+    print ("grabing game details from list")
+    writelog("starting game detail grab test")
+    start = time()
+    print ("No. of items in list: " + str(len(list)))
+    for x in list:
+        url = "http://www.mobygames.com"+str(x)
+        url_hash = hashlib.sha1(url).hexdigest()
+        try:
+            f = open("cache/%s.txt" % url_hash, 'r')
+            x = f.read()
+            y = pq(x)
+            detpanel = y('.rightPanel #coreGameRelease div')
+            if len(detpanel) is 8:
+                det8.append(url)
+            elif len(detpanel) is 6:
+                det6.append(url)
+                det6list = [strip_accents(x.text_content()) for x in detpanel]
+                if "Published by" not in det6list:
+                    det6nopub.append(url)
+                elif "Developed by" not in det6list:
+                    det6nodev.append(url)
+                elif "Released" not in det6list:
+                    det6norel.append(url)
+                elif "Platforms" not in det6list:
+                    if "Platform" not in det6list:
+                        det6noplat.append(url)
+            elif len(detpanel) is 4:
+                det4.append(url)
+                det4list = [strip_accents(x.text_content()) for x in detpanel]
+                if "Published by" not in det4list:
+                    det4nopub.append(url)
+                elif "Developed by" not in det4list:
+                    det4nodev.append(url)
+                elif "Released" not in det4list:
+                    det4norel.append(url)
+                elif "Platforms" not in det4list:
+                    if "Platform" not in det4list:
+                        det4noplat.append(url)
+            else:
+                print (url)
+                deterr.append(url)
+        except:
+            print (x)
+            raise
+    print "8 fields: " + str(len(det8))
+    print "6 fields: " + str(len(det6))
+    print "---- No Publisher: " + str(len(det6nopub))
+    print "---- No Developer: " + str(len(det6nodev))
+    print "---- No Release date: " + str(len(det6norel))
+    print "---- No Platforms: " + str(len(det6noplat))
+    print "4 fields: " + str(len(det4))
+    print "---- No Publisher: " + str(len(det4nopub))
+    print "---- No Developer: " + str(len(det4nodev))
+    print "---- No Release date: " + str(len(det4norel))
+    print "---- No Platforms: " + str(len(det4noplat))
+    print "Errors: " + str(len(deterr))
+    end = time()
+    elapse = str(td(seconds = end - start))
+    writelog("Completed game detail grab test in " + elapse)
+    print "Time elapsed " + elapse
+    
     
 ##Test##
 """
@@ -612,6 +728,59 @@ for stuff in y("#mof_object_list tbody td"):
         print stuff.text_content()
     objcnt += 1
 """
+def gamedetgrab2(list=scrap):
+    print ("grabing game details from list...")
+    writelog("starting game detail grab test 2")
+    start = time()
+    global gamenameandplatform
+    gamenameandplatform = []
+    for x in list:
+        url = "http://www.mobygames.com"+str(x)
+        url_hash = hashlib.sha1(url).hexdigest()
+        try:
+            f = open("cache/%s.txt" % url_hash, 'r')
+            x = f.read()
+            y = pq(x)
+            gamename = strip_accents(y('#gameTitle').text())
+            detpanel = y('.rightPanel #coreGameRelease div')
+            detlist = [strip_accents(x.text_content()) for x in detpanel]
+            gamerelease = strip_accents(detlist[-3])
+            platformlist = detlist[-1].split(',')
+            for x in platformlist:
+                gameplatform = x.strip()
+                gamenameandplatform.append([gamename,gameplatform,gamerelease])
+        except:
+            raise
+    print "listing: " + str(len(gamenameandplatform))
+    print ('Done grab test 2')
+    end = time()
+    elapse = str(td(seconds = end - start))
+    writelog("Completed game detail grab test 2 in " + elapse)
+    print "Time elapsed " + elapse
+
+def exportcsv(list,filenamestr='test',rowlimitnum=65000):
+    """export list to csv. default to 65k rows for MS excel 2003 compatibility"""
+    writelog("starting csv export")
+    start = time()
+    rowcount = 0
+    rowlimit = rowlimitnum
+    filecount = 0
+    for x in list:
+        if rowcount > rowlimit:
+            filecount += 1
+            rowcount = 0
+        filename = str(filenamestr) + str(filecount)
+        f = open('export/%s.csv' % filename,'a')
+        c = csv.writer(f)
+        c.writerow(x)
+        rowcount += 1
+    f.close()
+    print ("finish export")
+    end = time()
+    elapse = str(td(seconds = end - start))
+    writelog("Completed csv export in " + elapse)
+    print "Time elapsed " + elapse
+
 ######################
 # Unicode and CSV
 ######################
@@ -769,7 +938,7 @@ def scraperun(func):
 ###
 
 def deletecache(list,urlstr=''):
-
+    """delete cached data. Input form (list,[urlstr])"""
     for x in list:
         count = 0
         try:
@@ -786,13 +955,17 @@ def deletecache(list,urlstr=''):
 # Check for complete html
 ######
 
-def htmlcheck(urllist):
-    exec "badhtml = []"
+def htmlcheck(urllist,urlstr=''):
+    print "Checking html completeness"
+    writelog ("Running html check for completeness.")
+    start = time()
+    global badhtml
+    badhtml = []
     good = 0
     bad = 0
     print ("Total: " + str(len(credplatform)))
     for x in urllist:
-        url = "http://www.mobygames.com"+str(x)
+        url = "http://www.mobygames.com"+str(x)+str(urlstr)
         #print ("checking "+ url)
         url_hash = hashlib.sha1(url).hexdigest()
         f = open("cache/%s.txt" % url_hash, 'r')
@@ -802,23 +975,26 @@ def htmlcheck(urllist):
         else:
             badhtml.append(url)
             bad += 1
+    end = time()
+    elapse = str(td(seconds = end - start))
+    writelog("Finised html check in: "+ elapse)
     print ("Good: " + str(good))
     print ("Bad: " + str(bad))
-
+    print ("Finished check in" + elapse)
 
 ######
 # re-scrape bad html
 ######
 
-def rescrape():
-    for url in badhtml:
+def rescrape(list):
+    for url in list:
         url_hash = hashlib.sha1(url).hexdigest()
         try:
             f=open("cache/%s.txt" % url_hash, 'r')
-            x=f.read()
-            y = pq(x)
-            for stuff in y(""):
-                grab4.append(stuff.text_content())
+            #x=f.read()
+            #y = pq(x)
+            #for stuff in y(""):
+            #    grab4.append(stuff.text_content())
         except IOError:
             print "scraping new html of "+str(url)
             resp = urllib2.urlopen(url).read()

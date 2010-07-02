@@ -569,7 +569,107 @@ def scrapepage7():
     writelog("Completed tech info page scrape in " + elapse)
     print "Time elapsed " + elapse
 
+######
+# scrape business model
+######
+def bizmodelcheck():
+    """check tech info page for business model"""
+    writelog("starting capturing of business model data test")
+    start = time()
 
+    global bizmodel
+    bizmodel = []
+    for x in scrap:
+        url = "http://www.mobygames.com"+str(x)+"/techinfo"
+        url_hash = hashlib.sha1(url).hexdigest()
+        try:
+            f=open("cache/%s.txt" % url_hash, 'r')
+        except:
+            raise
+        x=f.read()
+        y=pq(x)
+        main = y(".rightPanelMain table").text()
+
+        # check for business model in table
+        if "Business Model" in strip_accents(main):
+            bizmodel.append(url)
+    print ("Completed process")
+    end = time()
+    elapse = str(td(seconds = end - start))
+    writelog("Completed checking of tech info business model in " + elapse)
+    print "Time elapsed " + elapse
+
+
+######
+# scrape business model detail
+######
+def bizmoddetgrab():
+    """grab business model"""
+    writelog("starting grab of business model detail test")
+    start = time()
+    print "Running business model detail grab"
+    global bizdet
+    bizdet = []
+    for xurl in bizmodel:
+        url = xurl
+        url_hash = hashlib.sha1(url).hexdigest()
+        try:
+            f=open("cache/%s.txt" % url_hash, 'r')
+        except:
+            raise
+        check = 0 #debug check
+        x=f.read()
+        y=pq(x)
+        table = y(".rightPanelMain table")
+        num = len(table)*2
+        for x in range(2,num+1,2): # Check table details
+            str2 = ".rightPanelMain > table.techInfo:nth-child({0}) > tr > td:nth-child(1)".format(x)
+            column1 = strip_accents(y(str2).text())
+            if "Business Model" in column1:
+                #grab platform model
+                str1 = ".rightPanelMain > table.techInfo:nth-child({0}) thead".format(x)
+                platform = strip_accents(y(str1).text())
+                #print platform
+
+                #grab game name
+                gamename = strip_accents(y("#gameTitle a").text()) # get gamename
+                #print gamename
+
+                # getting release date
+                listing = [strip_accents(z.text_content()) for z in y("#coreGameRelease > div")]
+
+                # getting indexes and corresponding items
+                try:
+                    indexrel = listing.index("Released")
+                    releasedate = listing[indexrel+1]
+                except:
+                    releasedate = 'nil'
+                #print releasedate
+
+                # get column1 rows in a table
+                str3 = ".rightPanelMain > table.techInfo:nth-child({0}) > tr > td:nth-child(1)".format(x)
+                rows = y(str3)
+                rownum = len(rows)
+                rowlisting = []
+                for row in rows:
+                    rowlisting.append(strip_accents(row.text_content()))
+                targetrownum = rowlisting.index("Business Model")
+                # get target row in column 2
+                str4 = ".rightPanelMain > table.techInfo:nth-child({0}) > tr > td:nth-child(2)".format(x)
+                column2rows = y(str4)
+                model = strip_accents(column2rows[targetrownum].text_content())
+                # print model
+                # print url
+                bizdet.append([gamename,platform,releasedate,model,url])
+                check += 1
+                # print "Found"
+        if check == 0:
+            print url + " nothing?"
+    print ("Completed process")
+    end = time()
+    elapse = str(td(seconds = end - start))
+    writelog("Completed grab of business model detail test in " + elapse)
+    print "Time elapsed " + elapse
 #####
 # mobyrank individual platform scrap
 #####

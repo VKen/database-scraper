@@ -59,8 +59,7 @@ test = [x.attrib["href"] for x in d("#mof_object_list tbody a")]
 for x in num:
     y = pq("http://www.mobygames.com/browse/games/offset,"+str(x)+"/so,0a/list-games/")
     scrap.append(y)
-    print "done batch "+str(x)
-'''
+    print "done batch "+str(x)'''
 
 ####
 #### Grab moby URLs of individual Games
@@ -68,6 +67,8 @@ for x in num:
 def scrapepage():
     """Populate scrap list with URLs of individual games"""
     print ("Populating moby game list...")
+    global scrap
+    scrap = []
     # linecount = 0
     for x in num:
         url = "http://www.mobygames.com/browse/games/offset,"+str(x)+"/so,0a/list-games/"
@@ -889,6 +890,7 @@ def gamedetgrab2(list):
             detpanel = y('.rightPanel #coreGameRelease div')
             detlist = [strip_accents(x.text_content()) for x in detpanel]
             gamerelease = strip_accents(detlist[-3])
+            gamereleaseyear = yeargrab(gamerelease)
             platformlist = detlist[-1].split(',')
             for x in platformlist:
                 gameplatform = x.strip()
@@ -900,6 +902,99 @@ def gamedetgrab2(list):
     end = time()
     elapse = str(td(seconds = end - start))
     writelog("Completed game detail grab test 2 in " + elapse)
+    print "Time elapsed " + elapse
+
+
+def gamedetgrab3(list):
+    """grab individual game details: Publisher, Developer, Release Date, Platform + genre and other craps"""
+    print ("grabing game genre from list...")
+    writelog("starting game genre grab test")
+    start = time()
+    global gamegenres
+    global gamegenrelisting
+    gamegenres = []
+    gamegenrelisting = []
+
+    global genrecollation
+    genrecollation = []
+
+    #count = 0
+
+    for x in list:
+        #count += 1
+        url = "http://www.mobygames.com"+str(x)
+        url_hash = hashlib.sha1(url).hexdigest()
+        try:
+            f = open("cache/%s.txt" % url_hash, 'r')
+            x = f.read()
+            y = pq(x)
+            f.close()
+        except:
+            raise
+        gamename = strip_accents(y('#gameTitle').text())
+        detpanel = y('.rightPanel #coreGameRelease div')
+        detlist = [strip_accents(x.text_content()) for x in detpanel]
+        gamerelease = strip_accents(detlist[-3])
+        gamereleaseyear = yeargrab(gamerelease)
+        gamegenre = []
+
+        # General Genre Classification
+        c1 = 'Nil' # Action
+        c2 = 'Nil' # Adventure
+        c3 = 'Nil' # Educational
+        c4 = 'Nil' # Racing / Driving
+        c5 = 'Nil' # Role-Playing (RPG)
+        c6 = 'Nil' # Simulation
+        c7 = 'Nil' # Sports
+        c8 = 'Nil' # Strategy
+
+        genrelist = (y("#coreGameGenre div div"))
+        if len(genrelist): # Check for genre existence
+            listing = []
+            for x in genrelist:
+                listing.append(strip_accents(x.text_content()))
+                gamegenrelisting.append(strip_accents(x.text_content()))
+            try:
+                genrepos = listing.index('Genre')
+                genreclasses = genrelist[genrepos+1]
+                for x in genreclasses:
+                    gamegenre.append(strip_accents(x.text_content()))
+                    gamegenre.sort()
+                    for x in gamegenre:
+                        if 'Action' in x:
+                            c1 = 'Action'
+                        elif 'Adventure' in x:
+                            c2 = 'Adventure'
+                        elif 'Educational' in x:
+                            c3 = 'Educational'
+                        elif 'Racing' in x:
+                            c4 = 'Racing / Driving'
+                        elif 'RPG' in x:
+                            c5 = 'Role-Playing (RPG)'
+                        elif 'Simulation' in x:
+                            c6 = 'Simulation'
+                        elif 'Sports' in x:
+                            c7 = 'Sports'
+                        elif 'Strategy' in x:
+                            c8 = 'Strategy'
+                        genrecollation.append(x)
+            except ValueError:
+                pass
+            except:
+                raise
+                    
+        platformlist = detlist[-1].split(',')
+        for x in platformlist:
+            gameplatform = x.strip()
+            gamegenrelist = [c1, c2, c3, c4, c5, c6, c7, c8]
+            gamegenres.append([gamename,gameplatform,gamerelease,gamereleaseyear]+gamegenrelist)
+        #if count >= 100:
+            #break
+
+    print ('Done game genre grab test')
+    end = time()
+    elapse = str(td(seconds = end - start))
+    writelog("Completed game genre grab test in " + elapse)
     print "Time elapsed " + elapse
 
 ######
@@ -1006,7 +1101,7 @@ def mobyrankcheck(list,optionnum = 1):
             for x in range(0,num):
                 link = corelist[x].attrib["href"]
                 if "/mobyrank" in link: # check for platform urls
-                    mobyplat.append(link)
+                    mobyplat.append("http://www.mobygames.com"+link)
                     count2 += 1
                 else:
                     pass
@@ -1222,6 +1317,162 @@ def gamemobyrankgrab(listinput,option):
     print "Time elapsed " + elapse
 
 ######
+# Mobyscore grab
+######
+
+def gamemobyscoregrab(listinput,option):
+    """grab moby score. options: 'c'=complete, 'p'=press only, 's'=score only.""" 
+    print ("grabing mobyscore details from list...")
+    writelog("starting mobyscore detail grab test...")
+    start = time()
+    global mobyscorelist
+    mobyscorelist = []
+    global scorecat
+    scorecat = []
+
+    # debug break
+    total = float(len(listinput))
+    percent = float(0)
+    count = float(0)
+    newpercent = float(0)
+    for x in listinput:
+        url = str(x)
+        url_hash = hashlib.sha1(url).hexdigest()
+        try:
+            f = open("cache/%s.txt" % url_hash, 'r')
+            x = f.read()
+            y = pq(x)
+            f.close()
+        except:
+            raise
+        # initialize data fields
+        gamename = 'Nil'
+        platform = 'Nil'
+        publisher = 'Nil'
+        developer = 'Nil'
+        releasedate = 'Nil'
+        releaseyear = 'Nil'
+        mobyrank = 'Nil'
+        mobyscore = 'Nil'
+        mobyscorevoter = 'Nil'
+        mobyscorefinal = []
+        press = []
+
+        # scorelisting classification
+        c1 = 'Nil' # AI
+        c2 = 'Nil' # Acting
+        c3 = 'Nil' # Effectiveness
+        c4 = 'Nil' # Gameplay
+        c5 = 'Nil' # Graphics
+        c6 = 'Nil' # Personal Slant
+        c7 = 'Nil' # Sound / Music
+        c8 = 'Nil' # Story / Presentation
+        c9 = 'Nil' # Text Parser
+
+        # Start of grabbing operations
+        gamename = strip_accents(y("#gameTitle").text())
+        platform = strip_accents(y("#gamePlatform").text())
+
+        # Grab publisher developer, and release date
+        listing = [strip_accents(x.text_content()) for x in y("#coreGameRelease > div")]
+        # getting indexes and corresponding items
+        try:
+            indexpub = listing.index("Published by")       
+            publisher = listing[indexpub+1]
+        except:
+            pass
+        try:
+            indexdev = listing.index("Developed by")
+            developer = listing[indexdev+1]
+        except:
+            pass
+        try:
+            indexrel = listing.index("Released")
+            releasedate = listing[indexrel+1]
+            try:
+                releaseyear = yeargrab(releasedate)
+            except:
+                pass
+        except:
+            pass   
+
+        # Grab mobyrank
+        #mobyrank = strip_accents(y("#coreGameRank .fr.scoreBoxBig").text())
+
+        # Grab moby score from the overall box
+        mobyscore = strip_accents(y("#coreGameScore > div.fr").text())
+
+        # apply to combined and only-score list
+        if option in "cs":
+            # Grab voters number for moby score
+            footer = y(".m5 + div.floatholder table.reviewList tfoot .left").text()
+            mobyscorevoter = strip_accents(voters(footer))
+
+            # Grab score category
+            mobyscorecat = []
+            mobyscorecatscore = []
+            mobyscorecombined = []
+            try:
+                table = y(".m5 + div.floatholder table.reviewList tbody tr td.left")
+                num = len(table)
+                for x in range(0,num,2):
+                    mobyscorecat.append(strip_accents(table[x].text_content()))
+                    scorecat.append(strip_accents(table[x].text_content()))
+
+            # Grab score category score
+                scoretable = y(".m5 + div.floatholder table.reviewList tbody tr td.center")
+                for x in range(num/2):
+                    mobyscorecatscore.append(strip_accents(scoretable[x].text_content()))
+            except:
+                raise
+
+            # Combine mobyscore cat and score
+            zipped = zip(mobyscorecat,mobyscorecatscore)
+            for x in zipped:
+                z = list(x)
+                if 'AI' in z[0]:
+                    c1 = str(z[1])
+                elif 'Acting' in z[0]:
+                    c2 = str(z[1])
+                elif 'Effect' in z[0]:
+                    c3 = str(z[1])
+                elif 'Gameplay' in z[0]:
+                    c4 = str(z[1])
+                elif 'Graphics' in z[0]:
+                    c5 = str(z[1])
+                elif 'Personal' in z[0]:
+                    c6 = str(z[1])
+                elif 'Sound' in z[0]:
+                    c7 = str(z[1])
+                elif 'Story' in z[0]:
+                    c8 = str(z[1])
+                elif 'Text' in z[0]:
+                    c9 = str(z[1])
+                #for a in z:
+                    #mobyscorecombined.append(a)
+
+            # Combine mobyscorecombined list
+            #for x in mobyscorecombined:
+                #mobyscorefinal.append(x)
+        mobycats = [c1,c2,c3,c4,c5,c6,c7,c8,c9]
+        # compile mobyranklist
+        mobyscorelist.append([gamename,platform,publisher,developer,releasedate,releaseyear,mobyscore,mobyscorevoter]+mobycats)
+        # debug break
+        count += 1
+        newpercent = float(count) / total * 100
+        new = "%.1f" % newpercent
+        if float(new) > float(percent):
+            percent = new
+            print (str(new)+" complete...")
+        
+        
+        #   break
+    end = time()
+    elapse = str(td(seconds = end - start))
+    writelog("Completed moby score detail grab test in " + elapse)
+    print "Time elapsed " + elapse
+
+######
 # Truncate list function
 ######
 
@@ -1279,8 +1530,7 @@ def exportcsv(list,filenamestr='test',rowlimitnum=65000):
 for stuff in y("#mof_object_list tbody td"):
     if int(objcnt)%5 == 0:
         print stuff.text_content()
-    objcnt += 1
-"""
+    objcnt += 1"""
 
 
 ######################
@@ -1293,8 +1543,7 @@ for x in gamename:
     if x is unicode:
         c.writerow(unicodedata.normalize('NKFD',x).encode('ascii','ignore'))
     else:
-        c.writerow(x)
-"""
+        c.writerow(x)"""
 def strip_accents(string):
   import unicodedata
   return unicodedata.normalize('NFKD', unicode(string)).encode('ASCII', 'ignore')
@@ -1308,8 +1557,7 @@ numcount = 0
 for x in gamename:
     c.writerow([x.encode('utf-8')]+[gameyear[numcount]]+[gamepublisher[numcount].encode('utf-8')]+[gamegenre[numcount]]+[gameplatform[numcount].encode('utf-8')])
     numcount += 1
-    print x
-"""
+    print x"""
 def targetcsvfile(filename):
     f = open(filename,"w")
     global c
@@ -1416,6 +1664,109 @@ def scrapepagewindows():
             f = open("cache/%s.txt" % url_hash, 'w')
             f.write(resp)
             print "done "+str(url)
+
+
+######
+# Gamespot
+######
+
+def initgamespotlist():
+    global gslist
+    gslist = []
+    gamebrowserurl = "http://www.gamespot.com/games.html?type=games&mode=all&sort=title&dlx_type=all&sortdir=desc&official=all"
+    sitepage = Webpage(gamebrowserurl)
+    lastpage = sitepage.pq_text('ul.pages>li.last a')[0]
+    print ("Last page is "+str(lastpage))
+    for x in range(int(lastpage)):
+        url = "http://www.gamespot.com/games.html?type=games&mode=all&sort=title&dlx_type=all&sortdir=desc&official=all&page="+str(x)
+        gslist.append(url)
+
+def scrapegspage(listing):
+    writelog('Starting Gamespot Scraping and individual game link grab')
+    start = time()
+    global gsindlist
+    gsindlist = []
+    for x in listing:
+        try:
+            page = Webpage(x)
+        except KeyboardInterrupt:
+            raise
+        except:
+            end = time()
+            elapse = str(td(seconds = end - start))
+            writelog('error occurred')
+            raise
+        for x in page.pq_links('table tbody tr th a'):
+            url = 'http://www.gamespot.com'+str(x[1])
+            gsindlist.append(url)
+    end = time()
+    elapse = str(td(seconds = end - start))
+    writelog("Completed gamespot individual game page link grab in " + elapse)
+    print "Time elapsed " + elapse
+
+def gsindvpage(listing):
+    writelog("Starting Gamespot individual game page grab")
+    start = time()
+    global gstechinfo
+    global gserr1
+    global gserr2
+    gstechinfo = []
+    gserr1 = []
+    gserr2 = []
+    for x in listing:
+        try:
+            page = Webpage(x)
+        except KeyboardInterrupt:
+            raise
+        except:
+            end = time()
+            elapse = str(td(seconds = end - start))
+            writelog('error occurred')
+            raise
+        try:
+            techurl = page.pq_links('.techinfo a')[0][1]
+            if 'http' in techurl:
+                gstechinfo.append(techurl)
+            else:
+                gstechinfo.append('http://www.gamespot.com'+techurl)
+        except IndexError:
+            try:
+                techurl = page.pq_links('div.body div.product div.specs>a.details_link')[0][1]
+                if 'http' in techurl:
+                    gstechinfo.append(techurl)
+                else
+                    gstechinfo.append('http://www.gamespot.com'+techurl)
+            except:
+                gserr1.append(x)
+                pass
+        except TypeError:
+            gserr2.append(x)
+            pass
+    end = time()
+    elapse = str(td(seconds = end - start))
+    writelog("Completed gamespot individual game page grab in " + elapse)
+    print "Time elapsed " + elapse
+    
+
+def gsindvtech(listing=''):
+    writelog("Starting Gamespot individual game tech page grab")
+    start = time()
+    listing = gstechinfo
+    for x in listing:
+        try:
+            page = Webpage(x)
+        except KeyboardInterrupt:
+            raise
+        except:
+            end = time()
+            elapse = str(td(seconds = end - start))
+            writelog('error occurred')
+            raise
+    end = time()
+    elapse = str(td(seconds = end - start))
+    writelog("Completed gamespot individual game tech page grab in " + elapse)
+    print "Time elapsed " + elapse
+#################### Miscellaneous ####################
 
 
 ######
@@ -1542,3 +1893,78 @@ def voters(footer_row):
         return y[:-6]
     else:
         raise IOError
+
+######
+# grab year
+######
+
+def yeargrab(str):
+    year = str[-2:]
+    if int(year)<15:
+        yr = '20'+year
+    if int(year)>40:
+        yr = '19'+year
+    return yr
+ 
+
+
+######
+# Webpage class
+######
+
+class Webpage(object):
+    def __init__(self, url, cache=True, retries=20):
+        #constructor, takes a webpage
+        self.url = url
+        self.cache = cache
+        self.retries = retries
+        self.tries = 0
+        self.pq = None
+
+        print(url)
+        self.url_hash = hashlib.sha1(url).hexdigest()
+
+        #load from disk if it exists, if not fetch and store and disk
+        if self.cache:
+            try:
+                f = open("cache/%s.txt" % self.url_hash)
+                tmp = f.read()
+            except IOError:
+                tmp = self._get_url()
+        else:
+            tmp = self._get_url()
+
+        #check if tmp contains anything
+        if tmp:
+            self.pq = pq(tmp)
+        else:
+            self.pq = None
+
+    def _get_url(self):
+        while True:
+            try:
+                if self.tries==self.retries:
+                    return None
+                resp = urllib2.urlopen(self.url).read()
+                if self.cache:
+                    f = open("cache/%s.txt" % self.url_hash, 'w')
+                    f.write(resp)
+                return resp
+            except KeyboardInterrupt:
+                raise
+            except:
+                self.tries += 1
+                pass
+
+    def pq_text(self, sel):
+        #returns a list of text content
+        return [x.text_content() for x in self.pq(sel)]
+
+    def pq_links(self, sel):
+        #returns a list of tuples of link text then link href
+        return [(x.text_content(), x.attrib["href"]) for x in self.pq(sel)]
+
+    def __nonzero__(self):
+        #test if the webpage exists
+        return self.pq!=None
+

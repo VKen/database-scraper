@@ -14,9 +14,12 @@ def checkdev(listofdev,startoftag=3,option=0):
             check += 1
             notag.append(x[:startoftag])
             if option == 1:
+                x.insert(startoftag,'0')
                 x.insert(startoftag,'NoTag')
         else:
             if option == 1:
+                diff = len(x[startoftag:]) - int(count)
+                x.insert(startoftag,str(diff))
                 x.insert(startoftag,'Tag')
     return check
 

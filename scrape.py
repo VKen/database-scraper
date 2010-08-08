@@ -47,11 +47,9 @@ def mobylistcheck():
 def initmobylist(list=30657):
     """Initialize moby list"""
     global num
-    global scrap
     num = range(0,list+1,25)
     print "Tracking "+str(list)+" games in moby database"
     print "Last page starts with : " + str(num[-1])
-    scrap = []
 '''
 d = pq("http://www.mobygames.com/browse/games/offset,"+str(x)+"/so,0a/list-games/")
 test = [x.attrib["href"] for x in d("#mof_object_list tbody a")]
@@ -486,15 +484,13 @@ def scrapepage5(list):
 ####
 # to dig studio/contribution affiliation
 ####
-'''
-for i in range(0,num):
+'''for i in range(0,num):
     stuff = x[i].attrib
     if not stuff:
         print (x[i].text_content())
         affiliation = x[i].text_content()
     else:
-        print (x[i][0].text_content()+" "+x[i][1].text_content()+" "+affiliation)
-'''
+        print (x[i][0].text_content()+" "+x[i][1].text_content()+" "+affiliation)'''
 
 ######
 # scrape moby release info page
@@ -998,7 +994,7 @@ def gamedetgrab3(list):
     print "Time elapsed " + elapse
 
 ######
-# grab game dev
+# grab game developers *Error
 ######
 
 def gamedevgrab(list):
@@ -1008,6 +1004,8 @@ def gamedevgrab(list):
     start = time()
     global devlist
     devlist = []
+    platcount = 0
+    platcount2 = 0
     for x in list:
         url = str(x)
         url_hash = hashlib.sha1(url).hexdigest()
@@ -1022,9 +1020,13 @@ def gamedevgrab(list):
         detpanel = y('.rightPanel #coreGameRelease div')
         detlist = [strip_accents(x.text_content()) for x in detpanel]
         gamerelease = strip_accents(detlist[-3])
-        platformlist = detlist[-1]
+        platformlist = strip_accents(y('#gamePlatform').text())
+        if not platformlist:
+            platformlist = detlist[-1]
+            platcount +=1
         if 'Combined View' in platformlist:
             platformlist = platformlist[0:-16]
+            platcount2 +=1
         main = y(".rightPanelMain tr") #Get the main info
         num = len(main) #get the number of table rows
         for x in range(0,num):  #begin ripping the table contents apart
@@ -1046,6 +1048,8 @@ def gamedevgrab(list):
         #break
 
     print ('Done grab dev test')
+    print ('No Platform: '+str(platcount))
+    print ('No Platform + other platform: ' + str(platcount2))
     end = time()
     elapse = str(td(seconds = end - start))
     writelog("Completed game dev grab test in " + elapse)
@@ -1685,10 +1689,13 @@ def scrapegspage(listing):
     writelog('Starting Gamespot Scraping and individual game link grab')
     start = time()
     global gsindlist
+    global bin404
+    bin404 = []
     gsindlist = []
     for x in listing:
         try:
             page = Webpage(x)
+            page.pq.make_links_absolute('http://www.gamespot.com')
         except KeyboardInterrupt:
             raise
         except:
@@ -1697,7 +1704,7 @@ def scrapegspage(listing):
             writelog('error occurred')
             raise
         for x in page.pq_links('table tbody tr th a'):
-            url = 'http://www.gamespot.com'+str(x[1])
+            url = str(x[1])
             gsindlist.append(url)
     end = time()
     elapse = str(td(seconds = end - start))
@@ -1708,14 +1715,20 @@ def gsindvpage(listing):
     writelog("Starting Gamespot individual game page grab")
     start = time()
     global gstechinfo
+    global gscritic
     global gserr1
     global gserr2
+    global bin404
     gstechinfo = []
+    gscritic = []
     gserr1 = []
     gserr2 = []
+    bin404 = []
     for x in listing:
         try:
             page = Webpage(x)
+            if page:
+                page.pq.make_links_absolute('http://www.gamespot.com')
         except KeyboardInterrupt:
             raise
         except:
@@ -1723,25 +1736,34 @@ def gsindvpage(listing):
             elapse = str(td(seconds = end - start))
             writelog('error occurred')
             raise
+        if not page:
+            bin404.append(x)
+            pass
         try:
             techurl = page.pq_links('.techinfo a')[0][1]
-            if 'http' in techurl:
-                gstechinfo.append(techurl)
-            else:
-                gstechinfo.append('http://www.gamespot.com'+techurl)
+            gstechinfo.append(techurl)
         except IndexError:
             try:
                 techurl = page.pq_links('div.body div.product div.specs>a.details_link')[0][1]
-                if 'http' in techurl:
-                    gstechinfo.append(techurl)
-                else
-                    gstechinfo.append('http://www.gamespot.com'+techurl)
+                gstechinfo.append(techurl)
             except:
                 gserr1.append(x)
                 pass
         except TypeError:
             gserr2.append(x)
             pass
+        try:
+            criticurl = page.pq_links('.review_scores .critic_score .wrap span.more a')[0][1]
+            if criticurl:
+                if 'http' not in criticurl:
+                    break                
+            gscritic.append(criticurl)
+        except IndexError:
+            pass
+        except TypeError:
+            gserr2.append(x)
+        except:
+            raise
     end = time()
     elapse = str(td(seconds = end - start))
     writelog("Completed gamespot individual game page grab in " + elapse)
@@ -1751,20 +1773,163 @@ def gsindvpage(listing):
 def gsindvtech(listing=''):
     writelog("Starting Gamespot individual game tech page grab")
     start = time()
-    listing = gstechinfo
+    listing = set(gstechinfo)
+    global bin404
+    bin404 = []
+    global multidate
+    multidate = []
+    global gsincomplete
+    gsincomplete = []
+    global gsdevlist
+    gsdevlist = []
+    global gstechinfodata
+    gstechinfodata = []
+    global info
+    info = []
+    # start cycle
     for x in listing:
         try:
             page = Webpage(x)
+            if page:
+                page.pq.make_links_absolute('http://www.gamespot.com')
         except KeyboardInterrupt:
+            end = time()
+            elapse = str(td(seconds = end - start))
+            writelog('keyboard interrupt after ' + elapse)
+            raise
+        except:
+            end = time()
+            elapse = str(td(seconds = end - start))
+            writelog('error occurred')
+            print 'some error in grabbing page'
+            raise
+
+        if not page:
+            pass
+        else:
+            ## Grab primary information
+            title = strip_accents(page.pq_text('.product_title')[0])
+            platform = page.pq('.nav a.on')
+            if not platform:
+                platform = ''
+            else:
+                platform = strip_accents(platform[0].text_content())
+            
+            ## main tech info box
+            main = page.pq('#main #tech_info div.body div.module div.body dl.game_info').eq(0)
+    
+            if len(main('dd')) > 7:
+                print 'main is longer'
+                raise
+    
+            maindict = {} # initiate dictionary to deal with info
+    
+            for y in range(len(main('dd'))): # grab information
+                maindict[strip_accents(main('dt').eq(y).text())] = strip_accents(main('dd').eq(y).text())
+            keys = maindict.keys()
+    
+            # assign information
+            publisher = ''
+            if 'Publisher:' in keys:
+                publisher = maindict['Publisher:']
+    
+            developer = ''
+            if 'Developer:' in keys:
+                developer = maindict['Developer:']
+    
+            genre = ''
+            if 'Genre:' in keys:
+                genre = maindict['Genre:']
+    
+            releasedate = ''
+            regionrelease = ''
+            gameyear = ''
+            if 'Release Date:' in keys:
+                releasedate = maindict['Release Date:']
+                if '(more)' in releasedate:
+                    releasedate = releasedate[:-7]
+                    morelink = page.pq('a').filter(lambda i: pq(this).text() == '(more)').attr('href')
+                    multidate.append([title,platform,x,morelink])
+                if '(' in releasedate:
+                    dnum = releasedate.index('(')
+                    regionrelease = releasedate[dnum+1:-1]
+                    releasedate = releasedate[:dnum]
+                if releasedate:
+                    if not 'ancel' in releasedate and not 'TBA' in releasedate and not 'n/a' in releasedate and not releasedate: # exclude canceled, TBA, n/a, and empty
+                        gameyear = yeargrab(releasedate)
+    
+            esrb = ''
+            if 'ESRB:' in keys:
+                esrb = maindict['ESRB:']
+    
+            esrbdetail = ''
+            if 'ESRB Descriptors:' in keys:
+                esrbdetail = maindict['ESRB Descriptors:']
+        
+            copyprotection = ''
+            if 'Copy Protection:' in keys:
+                copyprotection = maindict['Copy Protection:']
+    
+            # start Game Information modules section grab
+            infomod = page.pq('#tech_info .body .module')
+            
+            # check Gameinfo availability
+            if infomod.filter(lambda i:'Game Information' in pq(this).text())('.body').text():
+                info.append(x)
+            # check Technical Support availability
+            #if infomod.filter(lambda i:'Technical Support' in pq(this).text())('.body').text():
+            #    pass
+            # check Official Site availability
+            #if infomod.filter(lambda i:'Official Site' in pq(this).text())('.body').text():
+            #    pass
+    
+            gstechinfodata.append([title,platform,developer,genre,releasedate,gameyear,regionrelease,esrb,esrbdetail,copyprotection])
+    
+            # check Credits availability
+            if infomod.filter(lambda i:'Credits' in pq(this).text())('.body').text():
+                tabledata = infomod.filter(lambda i:'Credits' in pq(this).text())('div.body table tr')
+                length = len(tabledata)
+                record = []
+                for z in range(length):
+                    designation = strip_accents(tabledata.eq(z)('th').text())
+                    devname = strip_accents(tabledata.eq(z)('td').text())
+                    record.append([devname,designation])
+                for a in record:
+                    gsdevlist.append(a + [title] + [platform] + [developer] + [releasedate] + [gameyear])
+    end = time()
+    elapse = str(td(seconds = end - start))
+    writelog("Completed gamespot individual game tech page grab in " + elapse)
+    print "Time elapsed " + elapse
+
+######
+# Scrape gamespot critic page
+######
+def gsindvcritic(listing=''):
+    writelog("Starting Gamespot individual game critic page grab")
+    start = time()
+    listing = set(gscritic)
+    global bin404
+    bin404 = []
+    for x in listing:
+        try:
+            page = Webpage(x)
+            if page:
+                page.pq.make_links_absolute('http://www.gamespot.com')
+            else:
+                bin404.append(x)
+                pass
+        except KeyboardInterrupt:
+            end = time()
+            elapse = str(td(seconds = end - start))
+            writelog('keyboard interrupt after ' + elapse)
             raise
         except:
             end = time()
             elapse = str(td(seconds = end - start))
             writelog('error occurred')
             raise
-    end = time()
     elapse = str(td(seconds = end - start))
-    writelog("Completed gamespot individual game tech page grab in " + elapse)
+    writelog("Completed gamespot individual game critic page grab in " + elapse)
     print "Time elapsed " + elapse
 #################### Miscellaneous ####################
 
@@ -1818,16 +1983,21 @@ def htmlcheck(urllist,urlstr=''):
     bad = 0
     print ("Total: " + str(len(urllist)))
     for x in urllist:
-        url = "http://www.mobygames.com"+str(x)+str(urlstr)
+        url = str(x)
         #print ("checking "+ url)
         url_hash = hashlib.sha1(url).hexdigest()
-        f = open("cache/%s.txt" % url_hash, 'r')
-        y = pq(f.read())
-        if "</body>" in y.html():
-            good += 1
-        else:
-            badhtml.append(url)
-            bad += 1
+        try:
+            f = open("cache/%s.txt" % url_hash, 'r')
+            y = pq(f.read())
+            if "</body>" in y.html():
+                good += 1
+            else:
+                badhtml.append(url)
+                bad += 1
+        except KeyboardInterrupt:
+            raise
+        except:
+            pass
     end = time()
     elapse = str(td(seconds = end - start))
     writelog("Finised html check in: "+ elapse)
@@ -1841,7 +2011,7 @@ def htmlcheck(urllist,urlstr=''):
 
 def rescrape(list,urlstr=''):
     for x in list:
-        url = "http://www.mobygames.com"+str(x)+str(urlstr)
+        url = x
         url_hash = hashlib.sha1(url).hexdigest()
         try:
             f=open("cache/%s.txt" % url_hash, 'r')
@@ -1898,13 +2068,13 @@ def voters(footer_row):
 # grab year
 ######
 
-def yeargrab(str):
-    year = str[-2:]
+def yeargrab(strinput):
+    year = strinput[-2:]
     if int(year)<15:
         yr = '20'+year
     if int(year)>40:
         yr = '19'+year
-    return yr
+    return str(yr)
  
 
 
@@ -1952,6 +2122,12 @@ class Webpage(object):
                 return resp
             except KeyboardInterrupt:
                 raise
+            except urllib2.HTTPError,e:
+                if self.tries >= 3 and e.code == 404:
+                    return None
+                else:
+                    self.tries += 1
+                    pass
             except:
                 self.tries += 1
                 pass
@@ -1967,4 +2143,54 @@ class Webpage(object):
     def __nonzero__(self):
         #test if the webpage exists
         return self.pq!=None
+
+
+######
+# Greenpool parallel scrapint test
+######
+
+def parallelscrape(urllist,poolsize=50,retries=20,overwrite=False):
+    import eventlet
+    from eventlet.green import urllib2
+    def fetch(url):
+        tries = 0
+        while True:
+            try:
+                print ('grabing ' + url)
+                body = urllib2.urlopen(url).read()
+                print ('grabbed' + url)
+                return url, body
+            except KeyboardInterrupt:
+                raise
+            except urllib2.HTTPError,e:
+                if tries >= retries:
+                    print ('failed '+url)
+                    return None
+                    tries += 1
+                else:
+                    tries += 1
+                    pass
+
+    if overwrite == True:
+        urllist2 = urllist
+    else:
+        urllist2 = []
+        print ('start check')
+        for item in urllist:
+            try:
+                url_hash = hashlib.sha1(item).hexdigest()
+                f = open('cache/%s.txt' % url_hash, 'r')
+                f.close()
+            except IOError:
+                urllist2.append(item)
+        print ('finished check')
+
+    print ('Start scraping')
+    pool = eventlet.GreenPool(poolsize)
+    for url, body in pool.imap(fetch,urllist2):
+        print ('writing cache')
+        url_hash = hashlib.sha1(url).hexdigest()
+        f = open('cache/%s.txt' % url_hash, 'w')
+        f.write(body)
+        print ('cached '+url)
 

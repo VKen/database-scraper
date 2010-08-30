@@ -26,6 +26,7 @@ import lxml
 import hashlib
 import os
 import csv
+import re
 from time import ctime as now
 from time import time
 from datetime import timedelta as td
@@ -50,14 +51,14 @@ def initmobylist(list=30657):
     num = range(0,list+1,25)
     print "Tracking "+str(list)+" games in moby database"
     print "Last page starts with : " + str(num[-1])
-'''
-d = pq("http://www.mobygames.com/browse/games/offset,"+str(x)+"/so,0a/list-games/")
+'''d = pq("http://www.mobygames.com/browse/games/offset,"+str(x)+"/so,0a/list-games/")
 test = [x.attrib["href"] for x in d("#mof_object_list tbody a")]
 
 for x in num:
     y = pq("http://www.mobygames.com/browse/games/offset,"+str(x)+"/so,0a/list-games/")
     scrap.append(y)
-    print "done batch "+str(x)'''
+    print "done batch "+str(x)
+'''
 
 ####
 #### Grab moby URLs of individual Games
@@ -1530,11 +1531,11 @@ def exportcsv(list,filenamestr='test',rowlimitnum=65000):
     print "Time elapsed " + elapse
 
 ##Test##
-"""
-for stuff in y("#mof_object_list tbody td"):
+"""for stuff in y("#mof_object_list tbody td"):
     if int(objcnt)%5 == 0:
         print stuff.text_content()
-    objcnt += 1"""
+    objcnt += 1
+"""
 
 
 ######################
@@ -1685,13 +1686,17 @@ def initgamespotlist():
         url = "http://www.gamespot.com/games.html?type=games&mode=all&sort=title&dlx_type=all&sortdir=desc&official=all&page="+str(x)
         gslist.append(url)
 
-def scrapegspage(listing):
+def scrapegspage(listing=''):
     writelog('Starting Gamespot Scraping and individual game link grab')
     start = time()
     global gsindlist
     global bin404
+    global gamebrowser
     bin404 = []
     gsindlist = []
+    listing = gslist
+    gamebrowser = []
+
     for x in listing:
         try:
             page = Webpage(x)
@@ -1706,14 +1711,38 @@ def scrapegspage(listing):
         for x in page.pq_links('table tbody tr th a'):
             url = str(x[1])
             gsindlist.append(url)
+        tableinfo = page.pq("#filter_results table tbody tr")
+        for x in range(len(tableinfo)):
+            gametitle = strip_accents(tableinfo.eq(x)('th').text())
+            gameplatform = strip_accents(tableinfo.eq(x)('td').eq(0).text())
+            gamegenre = strip_accents(tableinfo.eq(x)('td').eq(1).text())
+            releasedate = strip_accents(tableinfo.eq(x)('td').eq(4).text())
+            
+            gameyear = ''
+            
+            if '(more)' in releasedate:
+                releasedate = strip_accents(releasedate[:-7]).strip()
+                morelink = page.pq('a').filter(lambda i: pq(this).text() == '(more)').attr('href')
+                multidate.append([title,platform,x,morelink])
+            if '(' in releasedate:
+                dnum = releasedate.index('(')
+                regionrelease = releasedate[dnum+1:-1]
+                releasedate = strip_accents(releasedate[:dnum]).strip()
+            if releasedate:
+                if not 'ancel' in releasedate and not 'TBA' in releasedate and not 'n/a' in releasedate: # exclude canceled, TBA, and n/a
+                    gameyear = yeargrab(strip_accents(releasedate).strip())
+            
+            gamebrowser.append([gametitle,gameplatform,gamegenre,releasedate,gameyear])
+
     end = time()
     elapse = str(td(seconds = end - start))
     writelog("Completed gamespot individual game page link grab in " + elapse)
     print "Time elapsed " + elapse
 
-def gsindvpage(listing):
+def gsindvpage(listing=''):
     writelog("Starting Gamespot individual game page grab")
     start = time()
+    listing = gsindlist
     global gstechinfo
     global gscritic
     global gserr1
@@ -1786,6 +1815,10 @@ def gsindvtech(listing=''):
     gstechinfodata = []
     global info
     info = []
+    global gscrediting
+    gscrediting = []
+    global gsnocrediting
+    gsnocrediting = []
     # start cycle
     for x in listing:
         try:
@@ -1805,15 +1838,17 @@ def gsindvtech(listing=''):
             raise
 
         if not page:
+            bin404.append(x)
             pass
         else:
             ## Grab primary information
             title = strip_accents(page.pq_text('.product_title')[0])
             platform = page.pq('.nav a.on')
             if not platform:
-                platform = ''
+                #platform = ''
+                platform = re.search(r'gamespot.com/(\w+)/',x).group(1).lower()
             else:
-                platform = strip_accents(platform[0].text_content())
+                platform = strip_accents(platform[0].text_content()).lower()
             
             ## main tech info box
             main = page.pq('#main #tech_info div.body div.module div.body dl.game_info').eq(0)
@@ -1845,18 +1880,18 @@ def gsindvtech(listing=''):
             regionrelease = ''
             gameyear = ''
             if 'Release Date:' in keys:
-                releasedate = maindict['Release Date:']
+                releasedate = strip_accents(maindict['Release Date:']).strip()
                 if '(more)' in releasedate:
-                    releasedate = releasedate[:-7]
+                    releasedate = strip_accents(releasedate[:-7]).strip()
                     morelink = page.pq('a').filter(lambda i: pq(this).text() == '(more)').attr('href')
                     multidate.append([title,platform,x,morelink])
                 if '(' in releasedate:
                     dnum = releasedate.index('(')
                     regionrelease = releasedate[dnum+1:-1]
-                    releasedate = releasedate[:dnum]
+                    releasedate = strip_accents(releasedate[:dnum]).strip()
                 if releasedate:
-                    if not 'ancel' in releasedate and not 'TBA' in releasedate and not 'n/a' in releasedate and not releasedate: # exclude canceled, TBA, n/a, and empty
-                        gameyear = yeargrab(releasedate)
+                    if not 'ancel' in releasedate and not 'TBA' in releasedate and not 'n/a' in releasedate: # exclude canceled, TBA, and n/a
+                        gameyear = yeargrab(strip_accents(releasedate).strip())
     
             esrb = ''
             if 'ESRB:' in keys:
@@ -1883,10 +1918,11 @@ def gsindvtech(listing=''):
             #if infomod.filter(lambda i:'Official Site' in pq(this).text())('.body').text():
             #    pass
     
-            gstechinfodata.append([title,platform,developer,genre,releasedate,gameyear,regionrelease,esrb,esrbdetail,copyprotection])
+            gstechinfodata.append([title,platform,publisher,developer,genre,releasedate,gameyear,regionrelease,esrb,esrbdetail,copyprotection])
     
             # check Credits availability
-            if infomod.filter(lambda i:'Credits' in pq(this).text())('.body').text():
+            if infomod.filter(lambda i:'Credit' in pq(this).text())('.body').text() or infomod.filter(lambda i:'credit' in pq(this).text())('.body').text():
+                gscrediting.append(x) # append to record credit availability
                 tabledata = infomod.filter(lambda i:'Credits' in pq(this).text())('div.body table tr')
                 length = len(tabledata)
                 record = []
@@ -1894,8 +1930,12 @@ def gsindvtech(listing=''):
                     designation = strip_accents(tabledata.eq(z)('th').text())
                     devname = strip_accents(tabledata.eq(z)('td').text())
                     record.append([devname,designation])
+                if not record:
+                    gsnocrediting.append(x) # append, and check for conflict: credit found, yet no names
                 for a in record:
-                    gsdevlist.append(a + [title] + [platform] + [developer] + [releasedate] + [gameyear])
+                    gsdevlist.append(a + [title] + [platform] + [publisher] + [developer] + [releasedate] + [gameyear])
+            else:
+                gsincomplete.append(x) # no credit
     end = time()
     elapse = str(td(seconds = end - start))
     writelog("Completed gamespot individual game tech page grab in " + elapse)
@@ -1910,6 +1950,9 @@ def gsindvcritic(listing=''):
     listing = set(gscritic)
     global bin404
     bin404 = []
+    global criticdata
+    criticdata = []
+    #count = 0
     for x in listing:
         try:
             page = Webpage(x)
@@ -1928,6 +1971,69 @@ def gsindvcritic(listing=''):
             elapse = str(td(seconds = end - start))
             writelog('error occurred')
             raise
+        # grab platform information
+        try:        
+            platform = strip_accents(page.pq_text("#primary_nav ul.platforms a.on span")[0]).lower()
+        except IndexError:
+            platform = re.search(r'gamespot.com/(\w+)/',x).group(1)
+        # grab basic information
+        infobox = page.pq("#gamestats div.stats_summary")
+        gametitle = strip_accents(infobox("div.product_title a").text())
+        publisher = strip_accents(infobox(".stats .publisher").text())
+        genre = strip_accents(infobox(".stats .genre").text())
+        releasedate = strip_accents(infobox(".stats .date span.data").text()).strip()
+        if '(' in releasedate:
+            dnum = releasedate.index('(')
+            releasedate = releasedate[:dnum].strip()
+        year = ''
+        if releasedate:
+            if not 'ancel' in releasedate and not 'TBA' in releasedate and not 'n/a' in releasedate:
+                try:
+                    print (releasedate)
+                    year = yeargrab(releasedate)
+                except:
+                    raise
+        esrb = strip_accents(infobox(".stats .date").text())
+        avescore = page.pq("#score_summary li.critic_score .data a").text()
+        criticnumber = page.pq("#score_summary li.critic_score .more a").text()
+        if criticnumber:
+            if 'votes' in criticnumber:
+                criticnumber = criticnumber[:-5]
+            elif 'vote' in criticnumber:
+                criticnumber = criticnumber[:-4]
+            criticnumber = re.sub(r',','',criticnumber).strip()
+        # grab user scores
+        userscore = page.pq("#score_summary li.community_score .data a").text()
+        usernumber = page.pq("#score_summary li.community_score .more a").text()
+        if usernumber:
+            if 'votes' in usernumber:
+                usernumber = usernumber[:-5]
+            elif 'vote' in usernumber:
+                usernumber = usernumber[:-4]
+            usernumber = re.sub(r',','',usernumber).strip()
+        # grabbing critic table
+        rows = page.pq("#critic_reviews div.body table tr")
+        rowcount = len(rows) - 1
+        criticlist = []
+        for y in range(rowcount):
+            site = rows.eq(y)("td.site").text()
+            if "**" in site:
+                site = site[:-3]
+            score = rows.eq(y)("td.score").text()
+            if '/' in score:
+                score = score.split('/')
+                score = [x.strip() for x in score]
+            else:
+                score = [score,'']
+            date = rows.eq(y)("td.date").text()
+            criticlist.append(site)
+            criticlist.extend(score)
+            criticlist.append(date)
+        criticdata.append([gametitle,platform,releasedate,year,userscore,usernumber,avescore,criticnumber]+criticlist)
+        #count += 1
+        #if count >= 10:
+        #    break
+    end = time()
     elapse = str(td(seconds = end - start))
     writelog("Completed gamespot individual game critic page grab in " + elapse)
     print "Time elapsed " + elapse
@@ -2069,11 +2175,21 @@ def voters(footer_row):
 ######
 
 def yeargrab(strinput):
+    try:
+        year = re.search(r'(\d{4}?)-(\d{2}?)-(\d{2}?)',strinput).group(1)
+        if year:
+            return year
+    except:
+        pass
+    
     year = strinput[-2:]
-    if int(year)<15:
+    if int(year)<12:
         yr = '20'+year
-    if int(year)>40:
+    elif int(year)>40:
         yr = '19'+year
+    if len (str(yr).strip()) < 4:
+        print 'value less than 3 digit!'
+        assert False
     return str(yr)
  
 

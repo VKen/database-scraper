@@ -63,7 +63,7 @@ for x in num:
 ####
 #### Grab moby URLs of individual Games
 ####
-def scrapepage():
+def mobyscrapepage():
     """Populate scrap list with URLs of individual games"""
     print ("Populating moby game list...")
     global scrap
@@ -163,6 +163,9 @@ def scrapepage1():
     elapse = str(td(seconds = end - start))
     writelog("Completed individual game page scrape in " + elapse)
     print "Time elapsed " + elapse
+
+
+
 ######
 #scrape credits page
 ######
@@ -198,6 +201,41 @@ def scrapepage2():
     elapse = str(td(seconds = end - start))
     writelog("Completed credit scrape in " + elapse)
     print "Time elapsed " + elapse
+
+######
+# Grab platform page info from each tech page
+######
+
+def mobygrabplat(listing):
+    """Grab techinfo individual platform pages"""
+    global mbtechplatind
+    mbtechplatind = []
+    setlisting = set(listing)
+    for x in setlisting:
+        url = x
+        gamedet = []
+        page = pq(htmlcache(url))
+        page.make_links_absolute('http://www.mobygames.com')
+        # GameTitle
+        title = strip_accents(page('#gameTitle a').text()).strip()
+        gamedet.append(title)
+        # Grab core info
+        pagediv = page('.rightPanel #coreGameRelease div')
+        baseinfo = {}
+        for y in range(0,len(pagediv),2):
+            # left pane headings
+            category = strip_accents(pagediv.eq(y).text()).strip()
+            num1 = len(pagediv.eq(y+1)('a'))
+            baseinfo[category]=[]
+            baseinfo[str(category)+"_link"]=[]
+            for y1 in range(num1):
+                item = strip_accents(pagediv.eq(y+1)('a').eq(y1).text()).strip()
+                baseinfo[category].append(item)
+                link = pagediv.eq(y+1)('a').eq(y1).attr('href')
+                baseinfo[str(category)+"_link"].append(link)
+        gamedet.append(baseinfo)
+        gamedet.append(url)
+        mbtechplatind.append(gamedet)
 
 ######
 #scrape moby platform credits page
@@ -352,11 +390,13 @@ def creditcheck():
     global weird
     global credinplace
     global credplatform
+    global crednocred
     err = []
     err2 = []
     weird = []
     credinplace = []
     credplatform = []
+    crednocred = []
     total = len(scrap)
     print ("total: " + str(total))
     creditcount = 0
@@ -381,6 +421,7 @@ def creditcheck():
                 creditcount += 1
             elif "There are no credits" in z:   # Check for no-credits
                 nocreditcount += 1
+                crednocred.append(url)
             else:
                 try:
                     z1 = y(".rightPanelMain table").attr("summary") # Check for in place credits
@@ -783,7 +824,7 @@ def grabtype():
 ###########
 
 def gamedetgrab(list):
-    """grab individual game details: Publisher, Developer, Release Date, Platform"""
+    """grab individual game details: Publisher, Developer, Release Date, Platform check"""
     global deterr
     global det8
     global det6
@@ -993,6 +1034,115 @@ def gamedetgrab3(list):
     elapse = str(td(seconds = end - start))
     writelog("Completed game genre grab test in " + elapse)
     print "Time elapsed " + elapse
+
+
+######
+# Game detail grab, proper
+######
+
+def gamedetgrab4(listing):
+    """Take techinfo pages as input"""
+    global gamedetails
+    gamedetails = []
+    setlisting = [x for x in set(listing)]
+    setlisting.sort()
+    for x in setlisting:
+        url = x
+        gamedet = []
+        try:
+            print url
+            page = pq(htmlcache(url))
+        except ValueError:
+            print ('Value Error')
+            break
+        # GameTitle
+        title = strip_accents(page('#gameTitle a').text()).strip()
+        gamedet.append(title)
+        # Platform
+        platform = strip_accents(page('#gamePlatform a').text()).strip()
+        gamedet.append(platform)
+        # get left pane details
+        pagediv = page('.rightPanel #coreGameRelease div')
+        baseinfo = {}
+        for y in range(0,len(pagediv),2):
+            # left pane headings
+            category = strip_accents(pagediv.eq(y).text()).strip()
+            num1 = len(pagediv.eq(y+1)('a'))
+            baseinfo[category]=[]
+            for y1 in range(num1):
+                item = strip_accents(pagediv.eq(y+1)('a').eq(y1).text()).strip()
+                baseinfo[category].append(item)
+        # get right pane details
+        pagerdiv = page('#coreGameGenre div div')
+        genreinfo = {}
+        for z in range(0,len(pagerdiv),2):
+            #right pane headings
+            genrecat = strip_accents(pagerdiv.eq(z).text()).strip()
+            num2 = len(pagerdiv.eq(z+1)('a'))
+            genreinfo[genrecat] = []
+            for y2 in range(num2):
+                item2 = strip_accents(pagerdiv.eq(z+1)('a').eq(y2).text()).strip()
+                genreinfo[genrecat].append(item2)
+        gamedet.append(baseinfo)
+        gamedet.append(genreinfo)
+        gamedet.append(url)
+        gamedetails.append(gamedet)
+
+def formatgamedet(listing):
+    """Format game data for csv compilation"""
+    global mobygameinfo
+    mobygameinfo = []
+    for x in listing:
+        # Set empty list
+        mbcompile = []
+        # Title
+        mbcompile.append(x[0])
+        # platform
+        mbcompile.append(x[1])
+        # other platforms
+        mbcompile.append(x[2].get('Platform',''))
+        mbcompile.append(x[2].get('Also For',''))
+        mbcompile.append(x[2].get('Platforms',''))
+        # Publisher
+        mbcompile.append(x[2].get('Published by',[''])[0])
+        # Developer
+        mbcompile.append(x[2].get('Developed by',[''])[0])
+        # Release date
+        try:
+            mbcompile.append(x[2]['Released'][0])
+            # Release Year
+            try:
+                mbcompile.append(yeargrab(x[2]['Released'][0]))
+            except:
+                mbcompile.append('')
+        except KeyError:
+            mbcompile.append('')
+            mbcompile.append('')
+            print 'KeyError'
+            print x
+        except IndexError:
+            mbcompile.append('')
+            mbcompile.append('')
+            print 'IndexError'
+            print x
+        # Genre - Genre
+        mbcompile.append(x[3].get('Genre',''))
+        # Genre - perspective
+        mbcompile.append(x[3].get('Perspective',''))
+        # Genre - Non-sport
+        mbcompile.append(x[3].get('Non-Sport',''))
+        # Genre - Misc
+        mbcompile.append(x[3].get('Misc',''))
+        # Genre - Sport
+        mbcompile.append(x[3].get('Sport',''))
+        # Genre - Educational
+        mbcompile.append(x[3].get('Educational',''))
+        # URL
+        mbcompile.append(x[4])
+        # Put everything together
+        mobygameinfo.append(mbcompile)
+
+        
 
 ######
 # grab game developers *Error
@@ -1714,7 +1864,8 @@ def scrapegspage(listing=''):
         tableinfo = page.pq("#filter_results table tbody tr")
         for x in range(len(tableinfo)):
             gametitle = strip_accents(tableinfo.eq(x)('th').text())
-            gameplatform = strip_accents(tableinfo.eq(x)('td').eq(0).text())
+            #gameplatform = strip_accents(tableinfo.eq(x)('td').eq(0).text())
+            platform = re.search(r'gamespot.com/(\w+.*?)/',x).group(1).lower()
             gamegenre = strip_accents(tableinfo.eq(x)('td').eq(1).text())
             releasedate = strip_accents(tableinfo.eq(x)('td').eq(4).text())
             
@@ -1821,6 +1972,7 @@ def gsindvtech(listing=''):
     gsnocrediting = []
     # start cycle
     for x in listing:
+        url = x
         try:
             page = Webpage(x)
             if page:
@@ -1842,13 +1994,14 @@ def gsindvtech(listing=''):
             pass
         else:
             ## Grab primary information
-            title = strip_accents(page.pq_text('.product_title')[0])
-            platform = page.pq('.nav a.on')
-            if not platform:
+            title = str(strip_accents(page.pq_text('.product_title')[0]).strip())
+            title2 = str(re.match(r'^(.*) for \w+.*? - Technical',strip_accents(page.pq('title').text())).group(1))
+            #platform = page.pq('.nav a.on')
+            #if not platform:
                 #platform = ''
-                platform = re.search(r'gamespot.com/(\w+)/',x).group(1).lower()
-            else:
-                platform = strip_accents(platform[0].text_content()).lower()
+            platform = re.search(r'gamespot.com/(\w+.*?)/',x).group(1).lower()
+            #else:
+            #    platform = strip_accents(platform[0].text_content()).lower()
             
             ## main tech info box
             main = page.pq('#main #tech_info div.body div.module div.body dl.game_info').eq(0)
@@ -1875,7 +2028,10 @@ def gsindvtech(listing=''):
             genre = ''
             if 'Genre:' in keys:
                 genre = maindict['Genre:']
-    
+            try:
+                simplegenre = re.search(r'gamespot.com/(\w+.*?)/(\w+)/',x).group(2).lower()
+            except AttributeError:
+                simplegenre = ''
             releasedate = ''
             regionrelease = ''
             gameyear = ''
@@ -1918,7 +2074,7 @@ def gsindvtech(listing=''):
             #if infomod.filter(lambda i:'Official Site' in pq(this).text())('.body').text():
             #    pass
     
-            gstechinfodata.append([title,platform,publisher,developer,genre,releasedate,gameyear,regionrelease,esrb,esrbdetail,copyprotection])
+            gstechinfodata.append([title,title2,platform,publisher,developer,genre,simplegenre,releasedate,gameyear,regionrelease,esrb,esrbdetail,copyprotection,url])
     
             # check Credits availability
             if infomod.filter(lambda i:'Credit' in pq(this).text())('.body').text() or infomod.filter(lambda i:'credit' in pq(this).text())('.body').text():
@@ -1933,7 +2089,7 @@ def gsindvtech(listing=''):
                 if not record:
                     gsnocrediting.append(x) # append, and check for conflict: credit found, yet no names
                 for a in record:
-                    gsdevlist.append(a + [title] + [platform] + [publisher] + [developer] + [releasedate] + [gameyear])
+                    gsdevlist.append(a + [title] + [title2] + [platform] + [publisher] + [developer] + [releasedate] + [gameyear])
             else:
                 gsincomplete.append(x) # no credit
     end = time()
@@ -1954,6 +2110,7 @@ def gsindvcritic(listing=''):
     criticdata = []
     #count = 0
     for x in listing:
+        url = x
         try:
             page = Webpage(x)
             if page:
@@ -1972,13 +2129,14 @@ def gsindvcritic(listing=''):
             writelog('error occurred')
             raise
         # grab platform information
-        try:        
-            platform = strip_accents(page.pq_text("#primary_nav ul.platforms a.on span")[0]).lower()
-        except IndexError:
-            platform = re.search(r'gamespot.com/(\w+)/',x).group(1)
+        #try:        
+        #    platform = strip_accents(page.pq_text("#primary_nav ul.platforms a.on span")[0]).lower()
+        #except IndexError:
+        platform = re.search(r'gamespot.com/(\w+.*?)/',x).group(1)
         # grab basic information
         infobox = page.pq("#gamestats div.stats_summary")
-        gametitle = strip_accents(infobox("div.product_title a").text())
+        gametitle = str(strip_accents(infobox("div.product_title a").text()).strip())
+        title2 = str(re.match(r'^(.*?) Critic Reviews for .*? - GameSpot',strip_accents(page.pq('title').text())).group(1))
         publisher = strip_accents(infobox(".stats .publisher").text())
         genre = strip_accents(infobox(".stats .genre").text())
         releasedate = strip_accents(infobox(".stats .date span.data").text()).strip()
@@ -2022,14 +2180,14 @@ def gsindvcritic(listing=''):
             score = rows.eq(y)("td.score").text()
             if '/' in score:
                 score = score.split('/')
-                score = [x.strip() for x in score]
+                score = [z.strip() for z in score]
             else:
                 score = [score,'']
             date = rows.eq(y)("td.date").text()
             criticlist.append(site)
             criticlist.extend(score)
             criticlist.append(date)
-        criticdata.append([gametitle,platform,releasedate,year,userscore,usernumber,avescore,criticnumber]+criticlist)
+        criticdata.append([gametitle,title2,platform,releasedate,year,userscore,usernumber,avescore,criticnumber,url]+criticlist)
         #count += 1
         #if count >= 10:
         #    break
@@ -2115,8 +2273,8 @@ def htmlcheck(urllist,urlstr=''):
 # re-scrape bad html
 ######
 
-def rescrape(list,urlstr=''):
-    for x in list:
+def rescrape(listing,urlstr=''):
+    for x in listing:
         url = x
         url_hash = hashlib.sha1(url).hexdigest()
         try:
@@ -2128,6 +2286,9 @@ def rescrape(list,urlstr=''):
                     resp = urllib2.urlopen(url).read()
                     f = open("cache/%s.txt" % url_hash, 'w')
                     f.write(resp)
+                    break
+                except KeyboardInterrupt:
+                    print ('Keyboard Interrupt')
                     break
                 except urllib2.URLError, (err):
                     print ("URL error(%s)" % (err))
@@ -2191,7 +2352,17 @@ def yeargrab(strinput):
         print 'value less than 3 digit!'
         assert False
     return str(yr)
- 
+
+
+######
+# read html from cachedata
+######
+
+def htmlcache(url):
+    url_hash = hashlib.sha1(url).hexdigest()
+    f = open("cache/%s.txt" % url_hash, 'r')
+    x = f.read()
+    return x
 
 
 ######
@@ -2274,11 +2445,19 @@ def parallelscrape(urllist,poolsize=50,retries=20,overwrite=False):
             try:
                 print ('grabing ' + url)
                 body = urllib2.urlopen(url).read()
-                print ('grabbed' + url)
+                print ('grabbed ' + url)
                 return url, body
             except KeyboardInterrupt:
                 raise
             except urllib2.HTTPError,e:
+                if tries >= retries:
+                    print ('failed '+str(e)+':'+url)
+                    return None
+                    tries += 1
+                else:
+                    tries += 1
+                    pass
+            except:
                 if tries >= retries:
                     print ('failed '+url)
                     return None
@@ -2303,7 +2482,7 @@ def parallelscrape(urllist,poolsize=50,retries=20,overwrite=False):
 
     print ('Start scraping')
     pool = eventlet.GreenPool(poolsize)
-    for url, body in pool.imap(fetch,urllist2):
+    for url,body in pool.imap(fetch,urllist2):
         print ('writing cache')
         url_hash = hashlib.sha1(url).hexdigest()
         f = open('cache/%s.txt' % url_hash, 'w')

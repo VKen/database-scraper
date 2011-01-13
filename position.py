@@ -8,13 +8,13 @@
 
 
 from nltk import FreqDist as fd
-import csv
 
 ######
 # CSV reader
 ######
 
-def csvread(directory):
+def readcsv(directory):
+    import csv
     f = open(directory)
     c = csv.reader(f)
     return [x for x in c]
